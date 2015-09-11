@@ -13,15 +13,18 @@
 let s:save_cpo = &cpo
 set cpo&vim
 
-set cursorline!
-highlight HiParen ctermbg=234
+highlight link HiParen MatchParen
+highlight link HiParenClause CursorLine
 
 function! s:ClearHighlightParen()
     syntax clear HiParen
+    syntax clear HiParenClause
 endfunction
 
 function! s:HighlightParen(sl,sc,el,ec)
-    exe 'syntax region HiParen start=/\%'.a:sl.'l\%'.a:sc.'c./ end=/\%'.a:el.'l\%'.a:ec.'c./'
+    exe 'syntax region HiParenClause start=/\%'.a:sl.'l\%'.a:sc.'c./rs=s+1 end=/\%'.a:el.'l\%'.a:ec.'c./re=e-1 contains=HiParen keepend'
+    exe 'syntax match HiParen /\%'.a:sl.'l\%'.a:sc.'c./ contained'
+    exe 'syntax match HiParen /\%'.a:el.'l\%'.a:ec.'c./ contained'
 endfunction
 
 function! s:GetOpenParenFor(c)
@@ -140,21 +143,58 @@ function! s:HiParen()
             let it = s:IteratorPrev(lines,it)
         endwhile
     endif
-    echo string(openit).' - '.string(closeit)
+    " echo string(openit).' - '.string(closeit)
     call s:ClearHighlightParen()
     if openit != [] && closeit != []
         call s:HighlightParen(openit[0],openit[1],closeit[0],closeit[1])
     endif
 endfunction
 
-augroup HiParen
-    autocmd CursorMoved *.lisp call <SID>HiParen()
-    autocmd CursorMoved *.lsp call <SID>HiParen()
-    autocmd CursorMoved *.clj call <SID>HiParen()
-    autocmd CursorMovedI *.lisp call <SID>HiParen()
-    autocmd CursorMovedI *.lsp call <SID>HiParen()
-    autocmd CursorMovedI *.clj call <SID>HiParen()
-augroup end
+function! s:IsParenEnabled()
+    let b = getbufvar('.','parenenabled')
+    if b == ''
+        let b:parenenabled = 0
+    endif
+    return b:parenenabled
+endfunction
+
+function! s:EnableParen()
+    let b:parenenabled=1
+    let b:ft=&ft
+    let b:cl=&cursorline
+    set ft=
+    set nocul
+    augroup HiParen
+        autocmd CursorMoved <buffer> call <SID>HiParen()
+        autocmd CursorMovedI <buffer> call <SID>HiParen()
+    augroup end
+    call s:HiParen()
+endfunction
+
+function! s:DisableParen()
+    call s:ClearHighlightParen()
+    autocmd! HiParen CursorMoved <buffer> 
+    autocmd! HiParen CursorMovedI <buffer> 
+    exe 'set ft='.b:ft
+    if b:cl
+        set cursorline
+    endif
+    let b:parenenabled=0
+endfunction
+
+function! s:ToggleParen()
+    if s:IsParenEnabled()
+        call s:DisableParen()
+    else
+        call s:EnableParen()
+    endif
+endfunction
+
+command! HiParenToggle call <SID>ToggleParen()
+command! HiParenEnable call <SID>EnableParen()
+command! HiParenDisable call <SID>DisableParen()
+
+nnoremap <silent> <leader>q :HiParenToggle<CR>
 
 let &cpo = s:save_cpo
 unlet s:save_cpo
